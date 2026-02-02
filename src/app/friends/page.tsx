@@ -32,25 +32,31 @@ export default function FriendsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingFriend) {
-        await fetch(`/api/friends/${editingFriend.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
-      } else {
-        await fetch('/api/friends', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
+      const response = editingFriend
+        ? await fetch(`/api/friends/${editingFriend.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          })
+        : await fetch('/api/friends', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error || 'Failed to save friend'}`);
+        return;
       }
+
       setShowAddModal(false);
       setEditingFriend(null);
       setFormData({ name: '', email: '', phone: '', status: 'Not Contacted' });
       fetchFriends();
     } catch (error) {
       console.error('Error saving friend:', error);
+      alert('Error saving friend. Check console for details.');
     }
   };
 
