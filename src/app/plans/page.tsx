@@ -53,23 +53,29 @@ export default function PlansPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (editingPlan) {
-        await fetch(`/api/plans/${editingPlan.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
-      } else {
-        await fetch('/api/plans', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
+      const response = editingPlan
+        ? await fetch(`/api/plans/${editingPlan.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          })
+        : await fetch('/api/plans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        alert(`Error: ${errorData.error || 'Failed to save plan'}`);
+        return;
       }
+
       closeModal();
       fetchPlans();
     } catch (error) {
       console.error('Error saving plan:', error);
+      alert('Error saving plan. Check console for details.');
     }
   };
 
