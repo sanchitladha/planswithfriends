@@ -16,9 +16,10 @@ export default function FriendsPage() {
     try {
       const res = await fetch('/api/friends');
       const data = await res.json();
-      setFriends(data);
+      setFriends(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching friends:', error);
+      setFriends([]);
     } finally {
       setLoading(false);
     }

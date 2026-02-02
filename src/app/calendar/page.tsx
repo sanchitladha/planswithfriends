@@ -45,10 +45,12 @@ export default function CalendarPage() {
         eventsRes.json(),
         friendsRes.json(),
       ]);
-      setEvents(eventsData);
-      setFriends(friendsData);
+      setEvents(Array.isArray(eventsData) ? eventsData : []);
+      setFriends(Array.isArray(friendsData) ? friendsData : []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setEvents([]);
+      setFriends([]);
     } finally {
       setLoading(false);
     }

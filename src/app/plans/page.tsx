@@ -37,9 +37,10 @@ export default function PlansPage() {
     try {
       const res = await fetch('/api/plans');
       const data = await res.json();
-      setPlans(data);
+      setPlans(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching plans:', error);
+      setPlans([]);
     } finally {
       setLoading(false);
     }
