@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Friend, MyPlan } from '@/lib/types';
+import { MyPlan } from '@/lib/types';
 
 interface FriendPlan {
   id: string;
@@ -12,9 +12,20 @@ interface FriendPlan {
   endDate: string | null;
   description: string | null;
   source: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-interface FriendWithPlans extends Friend {
+interface FriendWithPlans {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  lastEmailSent: string | null;
+  lastEmailContent: string | null;
+  createdAt: string;
+  updatedAt: string;
   plans: FriendPlan[];
 }
 

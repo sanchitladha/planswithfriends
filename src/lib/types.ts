@@ -71,3 +71,26 @@ export interface GeneratedEmail {
   subject: string;
   body: string;
 }
+
+export type DraftStatus = 'draft' | 'pending_review' | 'approved' | 'sent';
+
+export interface EmailDraft {
+  id: string;
+  friendId: string;
+  friend?: Friend;
+  gmailDraftId: string | null;
+  subject: string;
+  body: string;
+  status: DraftStatus;
+  sentAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GoogleAuthStatus {
+  configured: boolean;
+  connected: boolean;
+  email?: string;
+  expiresAt?: Date;
+  message: string;
+}

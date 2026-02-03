@@ -22,6 +22,7 @@ model Friend {
   updatedAt DateTime @updatedAt
 
   plans     FriendPlan[]
+  drafts    EmailDraft[]
 }
 
 model FriendPlan {
@@ -60,4 +61,27 @@ model SharedCalendarEvent {
   participants String  // JSON array of friend IDs
   matchType   String   // overlap, same_event, nearby
   createdAt   DateTime @default(now())
+}
+
+model GoogleAuth {
+  id           String   @id @default("default") // Single row for the authenticated user
+  accessToken  String
+  refreshToken String?
+  expiryDate   DateTime?
+  email        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model EmailDraft {
+  id           String   @id @default(uuid())
+  friendId     String
+  friend       Friend   @relation(fields: [friendId], references: [id], onDelete: Cascade)
+  gmailDraftId String?  // Gmail API draft ID once created
+  subject      String
+  body         String
+  status       String   @default("draft") // draft, pending_review, approved, sent
+  sentAt       DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
