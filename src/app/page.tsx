@@ -127,7 +127,7 @@ export default function Dashboard() {
         fetchDrafts();
         fetchFriends();
       } else {
-        alert(data.error || 'Failed to create drafts');
+        alert(data.error + (data.details ? `: ${data.details}` : '') + (data.message ? `\n${data.message}` : ''));
       }
     } catch (error) {
       console.error('Error creating drafts:', error);

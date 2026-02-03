@@ -215,6 +215,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error creating drafts:', error);
-    return NextResponse.json({ error: 'Failed to create drafts' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Failed to create drafts', details: errorMessage }, { status: 500 });
   }
 }
