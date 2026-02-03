@@ -14,7 +14,9 @@ export default function Dashboard() {
   const [syncingCalendar, setSyncingCalendar] = useState(false);
   const [creatingDrafts, setCreatingDrafts] = useState(false);
   const [sendingDraft, setSendingDraft] = useState<string | null>(null);
+  const [copiedDraft, setCopiedDraft] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState<EmailDraft | null>(null);
+  const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ subject: '', body: '' });
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [simulatingReply, setSimulatingReply] = useState<string | null>(null);
@@ -233,6 +235,19 @@ export default function Dashboard() {
     }
   };
 
+  const handleCopyDraft = async (draft: EmailDraft) => {
+    const emailText = `To: ${draft.friend?.email}\nSubject: ${draft.subject}\n\n${draft.body}`;
+    try {
+      await navigator.clipboard.writeText(emailText);
+      setCopiedDraft(draft.id);
+      setTimeout(() => setCopiedDraft(null), 2000);
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      // Fallback: show in alert
+      alert('Email content:\n\n' + emailText);
+    }
+  };
+
   const statusCounts = friends.reduce((acc, friend) => {
     const status = friend.status as FriendStatus;
     acc[status] = (acc[status] || 0) + 1;
@@ -399,19 +414,21 @@ export default function Dashboard() {
           <div className="divide-y divide-gray-200">
             {pendingDrafts.map((draft) => (
               <div key={draft.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start justify-between gap-4 mb-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-medium text-gray-900">{draft.friend?.name}</span>
                       <span className="text-sm text-gray-500">{draft.friend?.email}</span>
-                      <span className="px-2 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded-full">
-                        {draft.status === 'pending_review' ? 'Pending Review' : 'Draft'}
-                      </span>
                     </div>
-                    <p className="text-sm font-medium text-gray-700">{draft.subject}</p>
-                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">{draft.body.substring(0, 150)}...</p>
+                    <p className="text-sm font-medium text-gray-700">Subject: {draft.subject}</p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => setExpandedDraft(expandedDraft === draft.id ? null : draft.id)}
+                      className="px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      {expandedDraft === draft.id ? 'Collapse' : 'Preview'}
+                    </button>
                     <button
                       onClick={() => handleEditDraft(draft)}
                       className="px-3 py-1.5 text-sm text-indigo-600 border border-indigo-300 rounded-md hover:bg-indigo-50 transition-colors"
@@ -419,11 +436,10 @@ export default function Dashboard() {
                       Edit
                     </button>
                     <button
-                      onClick={() => handleSendDraft(draft.id)}
-                      disabled={sendingDraft === draft.id || !googleStatus?.connected}
-                      className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+                      onClick={() => handleCopyDraft(draft)}
+                      className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                     >
-                      {sendingDraft === draft.id ? 'Sending...' : 'Confirm & Send'}
+                      {copiedDraft === draft.id ? 'Copied!' : 'Copy Email'}
                     </button>
                     <button
                       onClick={() => handleDeleteDraft(draft.id)}
@@ -433,6 +449,18 @@ export default function Dashboard() {
                     </button>
                   </div>
                 </div>
+                {/* Expanded email preview */}
+                {expandedDraft === draft.id && (
+                  <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="text-xs text-gray-500 mb-2">
+                      <strong>To:</strong> {draft.friend?.email}
+                    </div>
+                    <div className="text-xs text-gray-500 mb-3">
+                      <strong>Subject:</strong> {draft.subject}
+                    </div>
+                    <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{draft.body}</pre>
+                  </div>
+                )}
               </div>
             ))}
           </div>
