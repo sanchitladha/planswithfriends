@@ -9,6 +9,11 @@ export async function GET(
     const { id } = await params;
     const plan = await prisma.myPlan.findUnique({
       where: { id },
+      include: {
+        legs: {
+          orderBy: { order: 'asc' },
+        },
+      },
     });
 
     if (!plan) {

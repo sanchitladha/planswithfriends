@@ -41,6 +41,18 @@ export interface FriendPlan {
   updatedAt: Date;
 }
 
+export interface TripLeg {
+  id: string;
+  planId: string;
+  location: string;
+  startDate: Date;
+  endDate: Date | null;
+  notes: string | null;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MyPlan {
   id: string;
   title: string;
@@ -52,6 +64,7 @@ export interface MyPlan {
   confirmed: boolean;
   createdAt: Date;
   updatedAt: Date;
+  legs?: TripLeg[];
 }
 
 export interface SharedCalendarEvent {

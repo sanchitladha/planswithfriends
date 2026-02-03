@@ -42,12 +42,27 @@ model FriendPlan {
 model MyPlan {
   id          String   @id @default(uuid())
   title       String
-  location    String?
+  location    String?  // Primary location (for single-location trips)
   startDate   DateTime
   endDate     DateTime?
   description String?
   source      String   @default("manual") // manual, gmail, google_calendar
   confirmed   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  legs        TripLeg[]
+}
+
+model TripLeg {
+  id          String   @id @default(uuid())
+  planId      String
+  plan        MyPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  location    String
+  startDate   DateTime
+  endDate     DateTime?
+  notes       String?
+  order       Int      @default(0) // For ordering legs within a trip
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
