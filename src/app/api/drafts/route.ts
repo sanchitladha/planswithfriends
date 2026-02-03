@@ -124,11 +124,10 @@ export async function POST(request: NextRequest) {
         },
       });
     } else {
-      // Get all friends with emails who haven't been contacted or need follow-up
+      // Get all friends with emails
       friends = await prisma.friend.findMany({
         where: {
           email: { not: null },
-          status: { in: ['Not Contacted', 'Email Sent'] },
         },
       });
     }
