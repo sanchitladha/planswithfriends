@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { SharedCalendarEvent, Friend, MyPlan } from '@/lib/types';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Friend, MyPlan } from '@/lib/types';
 
 interface FriendPlan {
   id: string;
@@ -18,6 +18,13 @@ interface FriendWithPlans extends Friend {
   plans: FriendPlan[];
 }
 
+interface CalculatedMatch {
+  id: string;
+  friendPlan: FriendPlan & { friendName: string };
+  myPlan: MyPlan;
+  matchType: string;
+}
+
 function formatDate(date: Date | string): string {
   return new Date(date).toLocaleDateString('en-US', {
     month: 'short',
@@ -32,6 +39,43 @@ function formatDateLong(date: Date | string): string {
     day: 'numeric',
     year: 'numeric',
   });
+}
+
+// Check if two date ranges are within proximity (in days)
+function areDatesNearby(
+  start1: Date,
+  end1: Date,
+  start2: Date,
+  end2: Date,
+  proximityDays: number = 3
+): { isNearby: boolean; overlap: boolean } {
+  const msPerDay = 24 * 60 * 60 * 1000;
+
+  // Check for direct overlap
+  const overlap = start1 <= end2 && end1 >= start2;
+
+  // Check if within proximity (extend ranges by proximityDays)
+  const extendedStart1 = new Date(start1.getTime() - proximityDays * msPerDay);
+  const extendedEnd1 = new Date(end1.getTime() + proximityDays * msPerDay);
+  const isNearby = extendedStart1 <= end2 && extendedEnd1 >= start2;
+
+  return { isNearby, overlap };
+}
+
+// Check if locations are similar
+function areLocationsSimilar(loc1: string | null, loc2: string | null): boolean {
+  if (!loc1 || !loc2) return false;
+
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const norm1 = normalize(loc1);
+  const norm2 = normalize(loc2);
+
+  // Check if one contains the other or they share a city name
+  const city1 = loc1.split(',')[0].toLowerCase().trim();
+  const city2 = loc2.split(',')[0].toLowerCase().trim();
+
+  return norm1.includes(norm2) || norm2.includes(norm1) || city1 === city2 ||
+         city1.includes(city2) || city2.includes(city1);
 }
 
 const MATCH_TYPE_LABELS: Record<string, { label: string; color: string; description: string }> = {
@@ -55,42 +99,29 @@ const MATCH_TYPE_LABELS: Record<string, { label: string; color: string; descript
     color: 'bg-gray-100 text-gray-700 border-gray-300',
     description: 'Dates within 3 days',
   },
-  overlap: {
-    label: 'Date Overlap',
-    color: 'bg-blue-100 text-blue-700 border-blue-300',
-    description: 'Your travel dates overlap',
-  },
-  nearby: {
-    label: 'Nearby',
-    color: 'bg-purple-100 text-purple-700 border-purple-300',
-    description: 'Nearby location match',
-  },
 };
 
+const PROXIMITY_DAYS = 3;
+
 export default function CalendarPage() {
-  const [events, setEvents] = useState<SharedCalendarEvent[]>([]);
   const [friends, setFriends] = useState<FriendWithPlans[]>([]);
   const [myPlans, setMyPlans] = useState<MyPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [eventsRes, friendsRes, plansRes] = await Promise.all([
-        fetch('/api/calendar'),
+      const [friendsRes, plansRes] = await Promise.all([
         fetch('/api/friends'),
         fetch('/api/plans'),
       ]);
-      const [eventsData, friendsData, plansData] = await Promise.all([
-        eventsRes.json(),
+      const [friendsData, plansData] = await Promise.all([
         friendsRes.json(),
         plansRes.json(),
       ]);
-      setEvents(Array.isArray(eventsData) ? eventsData : []);
       setFriends(Array.isArray(friendsData) ? friendsData : []);
       setMyPlans(Array.isArray(plansData) ? plansData : []);
     } catch (error) {
       console.error('Error fetching data:', error);
-      setEvents([]);
       setFriends([]);
       setMyPlans([]);
     } finally {
@@ -102,38 +133,64 @@ export default function CalendarPage() {
     fetchData();
   }, [fetchData]);
 
-  const clearCalendar = async () => {
-    if (!confirm('Are you sure you want to clear all matches?')) return;
-    try {
-      await fetch('/api/calendar', { method: 'DELETE' });
-      fetchData();
-    } catch (error) {
-      console.error('Error clearing calendar:', error);
-    }
-  };
-
   // Get all friend plans across all friends
-  const allFriendPlans = friends.flatMap((friend) =>
-    (friend.plans || []).map((plan) => ({
-      ...plan,
-      friendName: friend.name,
-      friendId: friend.id,
-    }))
-  ).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  const allFriendPlans = useMemo(() => {
+    return friends.flatMap((friend) =>
+      (friend.plans || []).map((plan) => ({
+        ...plan,
+        friendName: friend.name,
+      }))
+    ).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+  }, [friends]);
 
-  // Find my plan that matches a calendar event (for showing context)
-  const findMyPlanForEvent = (event: SharedCalendarEvent) => {
-    // Look for a my plan that's within 3 days of this event
-    const eventStart = new Date(event.startDate);
-    const msPerDay = 24 * 60 * 60 * 1000;
+  // Calculate matches dynamically
+  const calculatedMatches = useMemo(() => {
+    const matches: CalculatedMatch[] = [];
+    const confirmedPlans = myPlans.filter(p => p.confirmed);
 
-    return myPlans.find((plan) => {
-      const planStart = new Date(plan.startDate);
-      const planEnd = plan.endDate ? new Date(plan.endDate) : planStart;
-      const daysDiff = Math.abs(eventStart.getTime() - planStart.getTime()) / msPerDay;
-      return daysDiff <= 7; // Show if within a week
+    for (const friendPlanWithName of allFriendPlans) {
+      for (const myPlan of confirmedPlans) {
+        const friendStart = new Date(friendPlanWithName.startDate);
+        const friendEnd = friendPlanWithName.endDate ? new Date(friendPlanWithName.endDate) : friendStart;
+        const myStart = new Date(myPlan.startDate);
+        const myEnd = myPlan.endDate ? new Date(myPlan.endDate) : myStart;
+
+        const { isNearby, overlap } = areDatesNearby(friendStart, friendEnd, myStart, myEnd, PROXIMITY_DAYS);
+        const locationsMatch = areLocationsSimilar(friendPlanWithName.location, myPlan.location);
+
+        // Only create a match if dates are nearby (within +/- 3 days)
+        if (isNearby) {
+          let matchType: string;
+
+          if (overlap && locationsMatch) {
+            matchType = 'same_event'; // Same time, same place!
+          } else if (locationsMatch) {
+            matchType = 'nearby_dates'; // Same place, dates within 3 days
+          } else if (overlap) {
+            matchType = 'date_overlap'; // Same time, different place
+          } else {
+            matchType = 'potential'; // Dates within 3 days, different places
+          }
+
+          matches.push({
+            id: `${friendPlanWithName.id}-${myPlan.id}`,
+            friendPlan: friendPlanWithName,
+            myPlan,
+            matchType,
+          });
+        }
+      }
+    }
+
+    // Sort by match quality (same_event > nearby_dates > date_overlap > potential)
+    const matchOrder = { same_event: 0, nearby_dates: 1, date_overlap: 2, potential: 3 };
+    return matches.sort((a, b) => {
+      const orderDiff = (matchOrder[a.matchType as keyof typeof matchOrder] || 4) -
+                        (matchOrder[b.matchType as keyof typeof matchOrder] || 4);
+      if (orderDiff !== 0) return orderDiff;
+      return new Date(a.friendPlan.startDate).getTime() - new Date(b.friendPlan.startDate).getTime();
     });
-  };
+  }, [allFriendPlans, myPlans]);
 
   if (loading) {
     return (
@@ -150,14 +207,6 @@ export default function CalendarPage() {
           <h1 className="text-2xl font-bold text-gray-900">Shared Calendar</h1>
           <p className="text-gray-600 mt-1">View friends&apos; plans and find overlap opportunities</p>
         </div>
-        {events.length > 0 && (
-          <button
-            onClick={clearCalendar}
-            className="px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-          >
-            Clear Matches
-          </button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -217,15 +266,15 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* Right Column: Matches */}
+        {/* Right Column: Matches (Dynamically Calculated) */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="p-4 border-b border-gray-200 bg-green-50">
             <h2 className="text-lg font-semibold text-gray-900">
-              Matches ({events.length})
+              Matches ({calculatedMatches.length})
             </h2>
-            <p className="text-sm text-gray-500 mt-1">Plans within +/- 3 days of yours</p>
+            <p className="text-sm text-gray-500 mt-1">Plans within +/- 3 days of yours (auto-detected)</p>
           </div>
-          {events.length === 0 ? (
+          {calculatedMatches.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -235,20 +284,19 @@ export default function CalendarPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-100 max-h-[600px] overflow-y-auto">
-              {events.map((event) => {
-                const matchType = MATCH_TYPE_LABELS[event.matchType] || MATCH_TYPE_LABELS.potential;
-                const myPlan = findMyPlanForEvent(event);
+              {calculatedMatches.map((match) => {
+                const matchType = MATCH_TYPE_LABELS[match.matchType] || MATCH_TYPE_LABELS.potential;
 
                 return (
-                  <div key={event.id} className="p-4 hover:bg-green-50/50">
+                  <div key={match.id} className="p-4 hover:bg-green-50/50">
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 w-12 text-center">
                         <div className="bg-green-100 rounded-lg p-1">
                           <div className="text-xs text-green-600 uppercase">
-                            {new Date(event.startDate).toLocaleDateString('en-US', { month: 'short' })}
+                            {new Date(match.friendPlan.startDate).toLocaleDateString('en-US', { month: 'short' })}
                           </div>
                           <div className="text-xl font-bold text-green-700">
-                            {new Date(event.startDate).getDate()}
+                            {new Date(match.friendPlan.startDate).getDate()}
                           </div>
                         </div>
                       </div>
@@ -257,33 +305,34 @@ export default function CalendarPage() {
                           <span className={`px-2 py-0.5 text-xs rounded-full border ${matchType.color}`}>
                             {matchType.label}
                           </span>
+                          <span className="px-2 py-0.5 text-xs bg-indigo-100 text-indigo-700 rounded-full">
+                            {match.friendPlan.friendName}
+                          </span>
                         </div>
-                        <h3 className="font-medium text-gray-900 mt-1">{event.title}</h3>
-                        {event.location && (
+                        <h3 className="font-medium text-gray-900 mt-1">{match.friendPlan.title}</h3>
+                        {match.friendPlan.location && (
                           <p className="text-sm text-gray-600 flex items-center gap-1 mt-0.5">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             </svg>
-                            {event.location}
+                            {match.friendPlan.location}
                           </p>
                         )}
                         <p className="text-xs text-gray-500 mt-1">
-                          {formatDateLong(event.startDate)}
-                          {event.endDate && ` - ${formatDateLong(event.endDate)}`}
+                          {formatDateLong(match.friendPlan.startDate)}
+                          {match.friendPlan.endDate && ` - ${formatDateLong(match.friendPlan.endDate)}`}
                         </p>
 
-                        {/* Show which of my plans this relates to */}
-                        {myPlan && (
-                          <div className="mt-2 p-2 bg-indigo-50 rounded text-xs">
-                            <span className="text-indigo-600 font-medium">Your plan:</span>{' '}
-                            <span className="text-indigo-800">{myPlan.title}</span>
-                            {myPlan.location && <span className="text-indigo-600"> in {myPlan.location}</span>}
-                            <span className="text-indigo-500">
-                              {' '}({formatDate(myPlan.startDate)}
-                              {myPlan.endDate && ` - ${formatDate(myPlan.endDate)}`})
-                            </span>
-                          </div>
-                        )}
+                        {/* Show which of my plans this matches */}
+                        <div className="mt-2 p-2 bg-indigo-50 rounded text-xs">
+                          <span className="text-indigo-600 font-medium">Matches your plan:</span>{' '}
+                          <span className="text-indigo-800">{match.myPlan.title}</span>
+                          {match.myPlan.location && <span className="text-indigo-600"> in {match.myPlan.location}</span>}
+                          <span className="text-indigo-500">
+                            {' '}({formatDate(match.myPlan.startDate)}
+                            {match.myPlan.endDate && ` - ${formatDate(match.myPlan.endDate)}`})
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -316,11 +365,11 @@ export default function CalendarPage() {
 
       {/* Legend */}
       <div className="bg-white rounded-lg p-4 border border-gray-200">
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Match Types</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Match Types (sorted by quality)</h3>
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 text-xs rounded-full border bg-green-100 text-green-700 border-green-300">Same Place & Time!</span>
-            <span className="text-xs text-gray-500">Both at same location during same dates</span>
+            <span className="text-xs text-gray-500">Both at same location during overlapping dates</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 text-xs rounded-full border bg-purple-100 text-purple-700 border-purple-300">Within 3 Days</span>
@@ -328,7 +377,7 @@ export default function CalendarPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 text-xs rounded-full border bg-blue-100 text-blue-700 border-blue-300">Dates Overlap</span>
-            <span className="text-xs text-gray-500">Same dates, different locations</span>
+            <span className="text-xs text-gray-500">Overlapping dates, different locations</span>
           </div>
         </div>
       </div>
