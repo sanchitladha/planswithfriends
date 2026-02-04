@@ -34,7 +34,14 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, location, startDate, endDate, description, source, confirmed } = body;
+    const { title, location, startDate, endDate, description, source, confirmed, legs } = body;
+
+    // If legs are provided, delete existing and create new ones
+    if (legs !== undefined) {
+      await prisma.tripLeg.deleteMany({
+        where: { planId: id },
+      });
+    }
 
     const plan = await prisma.myPlan.update({
       where: { id },
@@ -46,6 +53,22 @@ export async function PUT(
         ...(description !== undefined && { description: description || null }),
         ...(source && { source }),
         ...(confirmed !== undefined && { confirmed }),
+        ...(legs && legs.length > 0 && {
+          legs: {
+            create: legs.map((leg: { location: string; startDate: string; endDate?: string; notes?: string }, index: number) => ({
+              location: leg.location,
+              startDate: new Date(leg.startDate),
+              endDate: leg.endDate ? new Date(leg.endDate) : null,
+              notes: leg.notes || null,
+              order: index,
+            })),
+          },
+        }),
+      },
+      include: {
+        legs: {
+          orderBy: { order: 'asc' },
+        },
       },
     });
 
