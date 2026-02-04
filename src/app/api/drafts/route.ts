@@ -219,3 +219,68 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create drafts', details: errorMessage }, { status: 500 });
   }
 }
+
+// PUT /api/drafts - Regenerate all pending drafts with latest plans
+export async function PUT() {
+  try {
+    // Get my confirmed plans
+    const myPlans = await prisma.myPlan.findMany({
+      where: {
+        confirmed: true,
+        startDate: { gte: new Date() },
+      },
+      orderBy: { startDate: 'asc' },
+    });
+
+    if (myPlans.length === 0) {
+      return NextResponse.json({
+        error: 'No confirmed plans found',
+        message: 'Add some plans first before updating drafts',
+      }, { status: 400 });
+    }
+
+    // Get all pending drafts
+    const pendingDrafts = await prisma.emailDraft.findMany({
+      where: {
+        status: { in: ['draft', 'pending_review'] },
+      },
+      include: { friend: true },
+    });
+
+    if (pendingDrafts.length === 0) {
+      return NextResponse.json({
+        success: true,
+        updated: 0,
+        message: 'No pending drafts to update',
+      });
+    }
+
+    const updatedDrafts = [];
+
+    for (const draft of pendingDrafts) {
+      if (!draft.friend) continue;
+
+      // Generate new email content with latest plans
+      const { subject, body } = generateEmail(draft.friend.name, myPlans);
+
+      // Update the draft
+      const updated = await prisma.emailDraft.update({
+        where: { id: draft.id },
+        data: { subject, body },
+        include: { friend: true },
+      });
+
+      updatedDrafts.push(updated);
+    }
+
+    return NextResponse.json({
+      success: true,
+      updated: updatedDrafts.length,
+      drafts: updatedDrafts,
+    });
+  } catch (error) {
+    console.error('Error updating drafts:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Failed to update drafts', details: errorMessage }, { status: 500 });
+  }
+}

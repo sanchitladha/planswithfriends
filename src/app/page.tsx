@@ -248,6 +248,26 @@ export default function Dashboard() {
     }
   };
 
+  const [updatingDrafts, setUpdatingDrafts] = useState(false);
+
+  const handleUpdateDrafts = async () => {
+    setUpdatingDrafts(true);
+    try {
+      const res = await fetch('/api/drafts', { method: 'PUT' });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Updated ${data.updated} draft(s) with your latest plans!`);
+        fetchDrafts();
+      } else {
+        alert(data.error || 'Failed to update drafts');
+      }
+    } catch (error) {
+      console.error('Error updating drafts:', error);
+    } finally {
+      setUpdatingDrafts(false);
+    }
+  };
+
   const statusCounts = friends.reduce((acc, friend) => {
     const status = friend.status as FriendStatus;
     acc[status] = (acc[status] || 0) + 1;
@@ -255,11 +275,6 @@ export default function Dashboard() {
   }, {} as Record<FriendStatus, number>);
 
   const pendingDrafts = drafts.filter((d) => d.status === 'pending_review' || d.status === 'draft');
-
-  // Get draft for a friend if exists
-  const getDraftForFriend = (friendId: string) => {
-    return drafts.find((d) => d.friendId === friendId && d.status !== 'sent');
-  };
 
   if (loading) {
     return (
@@ -403,13 +418,36 @@ export default function Dashboard() {
       {pendingDrafts.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="p-4 border-b border-gray-200 bg-yellow-50">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Review Drafts ({pendingDrafts.length})
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">Review and edit these emails before sending</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Review Drafts ({pendingDrafts.length})
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">Review and edit these emails before sending</p>
+              </div>
+              <button
+                onClick={handleUpdateDrafts}
+                disabled={updatingDrafts}
+                className="px-3 py-1.5 text-sm bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                {updatingDrafts ? (
+                  <>
+                    <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                    Updating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Update with Latest Plans
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           <div className="divide-y divide-gray-200">
             {pendingDrafts.map((draft) => (
@@ -475,78 +513,6 @@ export default function Dashboard() {
             <StatusBadge status={status} size="sm" />
           </div>
         ))}
-      </div>
-
-      {/* Friends List with Email Preview */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Friends Status</h2>
-        </div>
-        {friends.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <p>No friends added yet.</p>
-            <p className="mt-2">Click &quot;Load Sample Data&quot; to get started or add friends manually.</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {friends.map((friend) => {
-              const draft = getDraftForFriend(friend.id);
-              return (
-                <div key={friend.id} className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                          <span className="text-indigo-600 font-medium">
-                            {friend.name.split(' ').map((n) => n[0]).join('')}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="font-medium text-gray-900">{friend.name}</h3>
-                          <p className="text-sm text-gray-500">{friend.email || 'No email'}</p>
-                        </div>
-                      </div>
-
-                      {/* Email Preview for friends with drafts or sent emails */}
-                      {(draft || friend.lastEmailContent) && (
-                        <div className="mt-3 ml-13 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <div className="flex items-center gap-2 mb-1">
-                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-xs font-medium text-gray-500">
-                              {draft ? (draft.status === 'sent' ? 'Sent Email' : 'Draft Email') : 'Last Email Sent'}
-                            </span>
-                            {friend.lastEmailSent && (
-                              <span className="text-xs text-gray-400">
-                                {new Date(friend.lastEmailSent).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600 line-clamp-2">
-                            {draft ? draft.body.substring(0, 120) : friend.lastEmailContent?.substring(0, 120)}...
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0">
-                      <StatusBadge status={friend.status as FriendStatus} />
-                      {(friend.status === 'Waiting for Reply' || friend.status === 'Email Sent') && (
-                        <button
-                          onClick={() => handleSimulateReply(friend.id, friend.name)}
-                          disabled={simulatingReply === friend.id}
-                          className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-                        >
-                          {simulatingReply === friend.id ? 'Simulating...' : 'Simulate Reply'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Edit Draft Modal */}
