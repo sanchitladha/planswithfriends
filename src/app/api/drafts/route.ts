@@ -99,11 +99,15 @@ export async function POST(request: NextRequest) {
       where: { id: 'default' },
     });
 
-    // Get my confirmed plans
+    // Get my confirmed plans (including ongoing trips where end date hasn't passed)
+    const today = new Date();
     const myPlans = await prisma.myPlan.findMany({
       where: {
         confirmed: true,
-        startDate: { gte: new Date() },
+        OR: [
+          { endDate: { gte: today } },  // End date is today or later (ongoing or future)
+          { endDate: null, startDate: { gte: today } },  // No end date, start is today or later
+        ],
       },
       orderBy: { startDate: 'asc' },
     });
@@ -224,11 +228,15 @@ export async function POST(request: NextRequest) {
 // PUT /api/drafts - Regenerate all pending drafts with latest plans
 export async function PUT() {
   try {
-    // Get my confirmed plans
+    // Get my confirmed plans (including ongoing trips where end date hasn't passed)
+    const today = new Date();
     const myPlans = await prisma.myPlan.findMany({
       where: {
         confirmed: true,
-        startDate: { gte: new Date() },
+        OR: [
+          { endDate: { gte: today } },  // End date is today or later (ongoing or future)
+          { endDate: null, startDate: { gte: today } },  // No end date, start is today or later
+        ],
       },
       orderBy: { startDate: 'asc' },
     });
